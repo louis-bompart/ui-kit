@@ -1,11 +1,14 @@
 import HeadlessPath from '@salesforce/resourceUrl/coveoheadless';
 import AtomicPath from '@salesforce/resourceUrl/atomicutils';
+import getHeadlessConfiguration from '@salesforce/apexContinuation/HeadlessController.getHeadlessConfiguration';
+
 // @ts-ignore
-import { loadScript } from 'lightning/platformResourceLoader';
+import {loadScript} from 'lightning/platformResourceLoader';
 
 const DEBOUNCE_DELAY = 200;
 let timeout;
 
+let headlessConfigPromise;
 /**
  * Debounces a function execution.
  * @param {Function} func The function for which to delay execution.
@@ -32,7 +35,7 @@ const cancelInitialSearch = () => {
     clearTimeout(timeout);
     timeout = undefined;
   }
-}
+};
 
 /**
  * Dispatches search request.
@@ -48,18 +51,25 @@ const executeInitialSearch = debounce(() => {
 /**
  * Returns true if registered components are initialized, false otherwise.
  */
-const getAreComponentsReady = () => !window.coveoHeadless.components.find(component => component.initialized === false);
+const getAreComponentsReady = () =>
+  !window.coveoHeadless.components.find(
+    (component) => component.initialized === false
+  );
 
 /**
- * Loads dependencies and returns an initialized Headless engine. 
- * @param element 
+ * Loads dependencies and returns an initialized Headless engine.
+ * @param element
  */
 async function initEngine(element) {
   await loadScript(element, HeadlessPath + '/browser/headless.js');
   await loadScript(element, AtomicPath + '/atomic-utils.js');
 
-  const config = CoveoHeadless.HeadlessEngine.getSampleConfiguration();
-
+  /**
+   * @type {import('../../../../../../headless/dist/index').HeadlessConfigurationOptions}
+   */
+  const config = JSON.parse(
+    await (headlessConfigPromise || getHeadlessConfiguration())
+  );
   const engine = new CoveoHeadless.HeadlessEngine({
     configuration: config,
     reducers: CoveoHeadless.searchAppReducers,
@@ -70,33 +80,50 @@ async function initEngine(element) {
 
 /**
  * Registers a component for future initialization.
- * @param element 
+ * @param element
  */
 function registerComponentForInit(element) {
   cancelInitialSearch();
+  startFetchingHeadlessConfig();
   if (!window.coveoHeadless) {
     window.coveoHeadless = {
       components: [],
-      engine: undefined
-    }
+      engine: undefined,
+    };
   }
-  const isComponentRegistered = window.coveoHeadless.components.find((component) => component.element === element)
+  const isComponentRegistered = window.coveoHeadless.components.find(
+    (component) => component.element === element
+  );
   if (!isComponentRegistered) {
     window.coveoHeadless.components.push({
       element,
-      initialized: false
+      initialized: false,
     });
   }
 }
 
 /**
+ * Start fetching the headless config (token etc) by doing an Apex call,
+ * if the call hasn't be made yet. Otherwise, do nothing.
+ */
+function startFetchingHeadlessConfig() {
+  if (!headlessConfigPromise) {
+    headlessConfigPromise = getHeadlessConfiguration();
+  }
+}
+
+/**
  * Sets registered component to initialized.
- * @param element 
+ * @param element
  */
 function setComponentInitialized(element) {
-  const component = window.coveoHeadless ? window.coveoHeadless.components.find((comp) => comp.element === element) : undefined;
+  const component = window.coveoHeadless
+    ? window.coveoHeadless.components.find((comp) => comp.element === element)
+    : undefined;
   if (!component) {
-    console.log('Fatal Error: Component was not registered before initialization.');
+    console.log(
+      'Fatal Error: Component was not registered before initialization.'
+    );
     return;
   }
   component.initialized = true;
@@ -107,7 +134,7 @@ function setComponentInitialized(element) {
 
 /**
  * Returns headless engine promise.
- * @param element 
+ * @param element
  */
 function getHeadlessEngine(element) {
   if (!window.coveoHeadless.engine) {
@@ -115,7 +142,7 @@ function getHeadlessEngine(element) {
       window.coveoHeadless.engine = initEngine(element);
       window.coveoHeadless.engine.then((engine) => {
         window.coveoHeadless.engine = engine;
-      })
+      });
     } catch (error) {
       console.error('Fatal error: unable to initialize Coveo Headless', error);
     }
@@ -128,4 +155,4 @@ export {
   registerComponentForInit,
   setComponentInitialized,
   getHeadlessEngine,
-}
+};
