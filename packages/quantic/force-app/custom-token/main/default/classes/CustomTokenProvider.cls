@@ -16,7 +16,7 @@ global with sharing class CustomTokenProvider implements ITokenProvider {
         return true;
     }
 
-    private static Map<String,String> getCurrentUserInfo() {
+    private static Map<String,String> getCurrentUserIdentity() {
         Map<String,String> currentUserInfo = new Map<String,String>();
         currentUserInfo.put('name', UserInfo.getUserEmail());
         currentUserInfo.put('type', 'User');
@@ -24,9 +24,13 @@ global with sharing class CustomTokenProvider implements ITokenProvider {
         return currentUserInfo;
     }
 
+    /**
+     * Return the array of user identities to be concerned by the token.
+     * See https://docs.coveo.com/en/56/build-a-search-ui/search-token-authentication#userids-array-of-restuserid-required.
+     */
     private static List<Map<String,String>> getUserIdentities() {
         List<Map<String,String>> userIdentities = new List<Map<String,String>>();
-        userIdentities.add(CustomTokenProvider.getCurrentUserInfo());
+        userIdentities.add(CustomTokenProvider.getCurrentUserIdentity());
         return userIdentities;
     }
 
@@ -45,6 +49,10 @@ global with sharing class CustomTokenProvider implements ITokenProvider {
         return (String) responseAsMap.get('token');
     }
 
+    /**
+     * Build a HttpRequest to get a search token from a TokenSettings__c object.
+     * @param {settings} the settings to use.
+     */
     private static HttpRequest buildHttpRequest(TokenSettings__c settings) {
         HttpRequest tokenRequest = new HttpRequest();
         tokenRequest.setEndpoint(settings.PlatformUrl__c + TOKEN_PATH + '?organizationId=' + settings.OrganizationId__c);
@@ -62,8 +70,27 @@ global with sharing class CustomTokenProvider implements ITokenProvider {
         return tokenRequest;
     }
 
+    /**
+     * Get a search token from Coveo Platform based on the setting and the current user identity.
+     * @param {settings} the settings to use.
+     */
+    private static String getToken(TokenSettings__c settings) {
+        HttpRequest tokenRequest = CustomTokenProvider.buildHttpRequest(settings);
+
+        HTTPResponse tokenResponse = (new Http()).send(tokenRequest);
+        if(!CustomTokenProvider.isASuccessResponse(tokenResponse)) {
+            throw new HttpException(tokenResponse.getBody());
+        }
+
+        return CustomTokenProvider.extractTokenFromResponse(tokenResponse);
+    }
+
+    /**
+     * Get a serialized object representing a HeadlessConfiguration, based on the TokenSettings__c
+     * of the organization and the user identity of the user that called the method/loaded the page.
+     */
     @AuraEnabled(continuation=true cacheable=false)
-    public static String getHeadlessConfiguration() {
+    global static String getHeadlessConfiguration() {
         TokenSettings__c settings = TokenSettings__c.getOrgDefaults();
 
         if (CustomTokenProvider.isTokenSettingInvalid(settings)) {
@@ -71,20 +98,10 @@ global with sharing class CustomTokenProvider implements ITokenProvider {
             return SampleTokenProvider.getHeadlessConfiguration();
         }
 
-        HttpRequest tokenRequest = CustomTokenProvider.buildHttpRequest(settings);
-
-        HTTPResponse tokenResponse = (new Http()).send(tokenRequest);
-        if(!CustomTokenProvider.isASuccessResponse(tokenResponse)) {
-            throw new HttpException(tokenResponse.getBody());
-        }
-        
         Map<String, String> headlessConfiguration = new Map<String, String>();
         headlessConfiguration.put('organizationId', settings.OrganizationId__c);
-        headlessConfiguration.put('accessToken', CustomTokenProvider.extractTokenFromResponse(tokenResponse));
+        headlessConfiguration.put('accessToken', CustomTokenProvider.getToken(settings););
         headlessConfiguration.put('platformUrl', settings.PlatformUrl__c);
         return JSON.serialize(headlessConfiguration);
-    }
-
-    global CustomTokenProvider() {
     }
 }
