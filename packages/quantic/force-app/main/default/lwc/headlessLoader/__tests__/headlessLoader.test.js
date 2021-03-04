@@ -3,18 +3,38 @@ import {
   executeInitialSearch,
   registerComponentForInit,
   setComponentInitialized,
-  getHeadlessEngine
+  getHeadlessEngine,
+  initializeWithHeadless
 } from '../headlessLoader';
 import { CoveoHeadlessStub, MockEngine } from '../../testUtils/coveoHeadlessStub';
 
 describe('c/headlessLoader', () => {
+  let mockedConsoleError;
+  let initialize;
+
+  const createComponentEntryWithInitStatus = (isInitialized) => ({
+    element: document.createElement('div'),
+    initialized: isInitialized
+  });
+
+  const assertComponentIsSetInitialized = (element) => {
+    expect(window.coveoHeadless.components).toContainEqual({
+      element,
+      initialized: true
+    });
+  }
+
   beforeEach(() => {
     jest.useFakeTimers();
+    mockedConsoleError = jest.fn();
+    initialize = jest.fn();
+    console.error = mockedConsoleError;
     global.CoveoHeadless = CoveoHeadlessStub;
   });
 
   afterEach(() => {
     delete window.coveoHeadless;
+    jest.clearAllMocks();
     jest.restoreAllMocks();
   });
 
@@ -85,26 +105,11 @@ describe('c/headlessLoader', () => {
   describe('setComponentInitialized', () => {
     const dispatchMock = jest.fn();
 
-    const createComponentEntryWithInitStatus = (isInitialized) => ({
-      element: document.createElement('div'),
-      initialized: isInitialized
-    });
-
-    const assertComponentIsSetInitialized = (element) => {
-      expect(window.coveoHeadless.components).toContainEqual({
-        element,
-        initialized: true
-      });
-    }
-
     describe('when coveoHeadless is undefined', () => {
       it('should log an error', () => {
-        const mockedLog = jest.fn();
-        console.log = mockedLog;
         const element = document.createElement('div');
-        setComponentInitialized(element);
 
-        expect(mockedLog).toBeCalledWith('Fatal Error: Component was not registered before initialization.');
+        expect(() => setComponentInitialized(element)).toThrowError('Fatal Error: Component was not registered before initialization');
       });
     });
 
@@ -112,9 +117,9 @@ describe('c/headlessLoader', () => {
       beforeEach(() => {
         window.coveoHeadless = {
           components: [],
-          engine: {
+          engine: Promise.resolve({
             dispatch: dispatchMock
-          }
+          })
         }
       });
 
@@ -153,11 +158,12 @@ describe('c/headlessLoader', () => {
           ];
         });
 
-        it('should set the component to initialized and start delayed search', () => {
+        it('should set the component to initialized and start delayed search', async () => {
           setComponentInitialized(element);
   
           assertComponentIsSetInitialized(element);
           jest.runAllTimers();
+          await window.coveoHeadless.engine;
           expect(dispatchMock).toBeCalled();
         });
       });
@@ -167,7 +173,7 @@ describe('c/headlessLoader', () => {
   describe('getHeadlessEngine', () => {
     const element = document.createElement('div');
 
-    describe('when coveoHeadless is undefined', () => {      
+    describe('when the engine is undefined', () => {      
       beforeEach(() => {
         window.coveoHeadless = {
           components: []
@@ -176,40 +182,95 @@ describe('c/headlessLoader', () => {
 
       it('should init the engine return a promise that resolves to that instance', async () => {
         const engine = await getHeadlessEngine(element);
+
         expect(engine).toBeInstanceOf(MockEngine);
-      });
-
-      describe('when initializing the engine fails', () => {
-        beforeEach(() => {
-          jest
-            .spyOn(CoveoHeadlessStub.HeadlessEngine, 'getSampleConfiguration')
-            .mockImplementation(() => {throw new Error('simulating failure')});
-        });
-        
-        it ('should log an error', async () => {
-          const mockedLog = jest.fn();
-          console.log = mockedLog;
-          setComponentInitialized(element);
-
-          expect(mockedLog).toBeCalledWith('Fatal Error: Component was not registered before initialization.');
-        });
       });
     });
 
-    describe('when coveoHeadless is defined', () => {
+    describe('when the engine is defined', () => {
       const definedEngine = {
         isDefined: true
       }
       beforeEach(() => {
         window.coveoHeadless = {
           components: [],
-          engine: definedEngine
+          engine: Promise.resolve(definedEngine)
         }
       });
 
       it('should return a promise that resolves to an instance of the engine', async () => {
         const engine = await getHeadlessEngine(element);
+
         expect(engine).toEqual(definedEngine);
+      });
+    });
+  });
+
+  describe('initializeWithHeadless', () => {
+    const element = document.createElement('div');
+
+    describe('when the engine is undefined', () => {      
+      beforeEach(() => {
+        window.coveoHeadless = {
+          components: [{
+            element,
+            initialized: false
+          }]
+        }
+      });
+
+      it('should init the engine and initialize ', async () => {
+        initializeWithHeadless(element, initialize);
+        const engine = await window.coveoHeadless.engine;
+
+        expect(engine).toBeInstanceOf(MockEngine);
+        expect(initialize).toHaveBeenCalled();
+        assertComponentIsSetInitialized(element);
+      });
+
+      describe('when initializing the engine fails', () => {
+        const errorMessage = 'simulating failure';
+        beforeEach(() => {
+          jest
+            .spyOn(CoveoHeadlessStub.HeadlessEngine, 'getSampleConfiguration')
+            .mockImplementation(() => {throw new Error(errorMessage)});
+        });
+        
+        it ('should throw an error', async () => {
+          let caughtError;
+          initializeWithHeadless(element, initialize);
+          try {
+            await window.coveoHeadless.engine;
+          } catch(error) {
+            caughtError = error.message;
+          }
+
+          expect(caughtError).toContain(errorMessage);
+        });
+      });
+    });
+
+    describe('when the engine is defined', () => {
+      const definedEngine = {
+        isDefined: true
+      }
+      beforeEach(() => {
+        window.coveoHeadless = {
+          components: [{
+            element,
+            initialized: false
+          }],
+          engine: Promise.resolve(definedEngine)
+        }
+      });
+
+      it('should initialize the component using the defined engine', async () => {
+        initializeWithHeadless(element, initialize);
+        const engine = await window.coveoHeadless.engine;
+
+        expect(engine).toEqual(definedEngine);
+        expect(initialize).toHaveBeenCalled();
+        assertComponentIsSetInitialized(element);
       });
     });
   });
