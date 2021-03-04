@@ -36,6 +36,7 @@ global with sharing class CustomTokenProvider implements ITokenProvider {
 
     private static Boolean isTokenSettingInvalid(TokenSettings__c settings) {
         return  String.isEmpty(settings.OrganizationId__c) ||
+                !CustomTokenProvider.isValidURL(settings.PlatformUrl__c) ||
                 String.isEmpty(settings.ApiKey__c);
     }
 
@@ -100,7 +101,7 @@ global with sharing class CustomTokenProvider implements ITokenProvider {
 
         Map<String, String> headlessConfiguration = new Map<String, String>();
         headlessConfiguration.put('organizationId', settings.OrganizationId__c);
-        headlessConfiguration.put('accessToken', CustomTokenProvider.getToken(settings););
+        headlessConfiguration.put('accessToken', CustomTokenProvider.getToken(settings));
         headlessConfiguration.put('platformUrl', settings.PlatformUrl__c);
         return JSON.serialize(headlessConfiguration);
     }
