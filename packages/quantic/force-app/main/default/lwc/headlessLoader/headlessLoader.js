@@ -76,9 +76,6 @@ async function initEngine(element) {
     await loadScript(element, HeadlessPath + '/browser/headless.js');
     await loadScript(element, AtomicPath + '/atomic-utils.js');
 
-    /**
-     * @type {import('../../../../../../headless/dist/index').HeadlessConfigurationOptions}
-     */
     const config = JSON.parse(
       await (headlessConfigPromise || getHeadlessConfiguration())
     );
