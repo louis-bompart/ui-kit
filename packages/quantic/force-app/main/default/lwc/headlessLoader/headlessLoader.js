@@ -1,5 +1,6 @@
 import HeadlessPath from '@salesforce/resourceUrl/coveoheadless';
 import AtomicPath from '@salesforce/resourceUrl/atomicutils';
+// @ts-ignore
 import getHeadlessConfiguration from '@salesforce/apexContinuation/HeadlessController.getHeadlessConfiguration';
 
 // @ts-ignore
