@@ -32,19 +32,21 @@ private class CustomTokenProviderTest {
     }
     
     static final String sampleHeadlessConfiguration = '{"platformUrl":"https://platform.cloud.coveo.com","accessToken":"xx564559b1-0045-48e1-953c-3addd1ee4457","organizationId":"searchuisamples"}';
+    static final String invalidTokenSettingsExceptionMessage = 'TokenSettings invalid. Defaulting to sample organization settings.';
+
+    static void assertExceptionIsInvalidTokenSettingsException(Exception e) {
+        System.assert(e instanceOf CustomTokenProvider.InvalidTokenSettingsException);
+        System.assertEquals(invalidTokenSettingsExceptionMessage, e.getMessage());
+    }
 
     @IsTest
-    static void withInvalidSetting(){
+    static void withEmptyPlatformUrl(){
         Test.startTest();
-        System.runAs(CustomTokenProviderTest.createDummyUser('foo1', 'System Administrator')){
-            CustomTokenProviderTest.setupTokenSettings('','someOrgId','someToken');
-            System.assertEquals(sampleHeadlessConfiguration, CustomTokenProvider.getHeadlessConfiguration());
-            
-            CustomTokenProviderTest.setupTokenSettings('https://foo.com','','someToken');
-            System.assertEquals(sampleHeadlessConfiguration, CustomTokenProvider.getHeadlessConfiguration());
-
-            CustomTokenProviderTest.setupTokenSettings('https://foo.com','someOrgId','');
-            System.assertEquals(sampleHeadlessConfiguration, CustomTokenProvider.getHeadlessConfiguration());
+        CustomTokenProviderTest.setupTokenSettings('','someOrgId','someToken');
+        try {
+            CustomTokenProvider.getHeadlessConfiguration();
+        } catch (Exception e) {
+            assertExceptionIsInvalidTokenSettingsException(e);
         }
         Test.stopTest();
     }
@@ -52,11 +54,35 @@ private class CustomTokenProviderTest {
     @IsTest
     static void withInvalidPlatformUrl(){
         Test.startTest();
-        System.runAs(CustomTokenProviderTest.createDummyUser('foo1', 'System Administrator')){
-            CustomTokenProviderTest.setupTokenSettings('httpsfoocom','someOrgId','someToken');
-            System.assertEquals(sampleHeadlessConfiguration, CustomTokenProvider.getHeadlessConfiguration());
+        CustomTokenProviderTest.setupTokenSettings('httpsfoocom','someOrgId','someToken');
+        try {
+            CustomTokenProvider.getHeadlessConfiguration();
+        } catch (Exception e) {
+            assertExceptionIsInvalidTokenSettingsException(e);
         }
         Test.stopTest();
+    }
+
+    @IsTest
+    static void withEmptyOrgId(){
+        Test.startTest();
+        CustomTokenProviderTest.setupTokenSettings('https://foo.com','','someToken');
+        try {
+            CustomTokenProvider.getHeadlessConfiguration();
+        } catch (Exception e) {
+            assertExceptionIsInvalidTokenSettingsException(e);
+        }
+        Test.stopTest();
+    }
+    
+    @IsTest
+    static void withEmptyApiKey(){
+        CustomTokenProviderTest.setupTokenSettings('https://foo.com','someOrgId','');
+        try {
+            CustomTokenProvider.getHeadlessConfiguration();
+        } catch (Exception e) {
+            assertExceptionIsInvalidTokenSettingsException(e);
+        }
     }
 
     @IsTest
